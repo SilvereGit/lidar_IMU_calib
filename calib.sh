@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-bag_path="/home/ha/rosbag/li_calib_data"
+bag_path="/home/mansour/data/dataset_calibration"
 
 outdoor_sync_bag_name=(
 #"Court-01.bag"
@@ -11,21 +11,24 @@ outdoor_sync_bag_name=(
 )
 
 indoor_sync_bag_name=(
-"Garage-01.bag"
-#"Garage-02.bag"
+#"2021-12-20-11-34-55_0.bag"
+#"2021-12-22-12-29-01.bag"
+"2021-12-22-12-15-09.bag"
+#"Garage-01.bag"
 #"Garage-03.bag"
 #"Garage-04.bag"
 #"Garage-05.bag"
 )
 
 imu_topic_name=(
-"/imu1/data_sync"
+#"/vectornav/imu"
+"/imu"
 #"/imu2/data_sync"
 #"/imu3/data_sync"
 )
 
 bag_start=1
-bag_durr=30
+bag_durr=600
 scan4map=15
 timeOffsetPadding=0.015
 
@@ -55,7 +58,7 @@ for i in "${!sync_bag_name[@]}"; do
                           bag_start:="${bag_start}" \
                           bag_durr:="${bag_durr}" \
                           scan4map:="${scan4map}" \
-                          lidar_model:="VLP_16" \
+                          lidar_model:="HDL_32" \
                           time_offset_padding:="${timeOffsetPadding}"\
                           ndtResolution:="${ndtResolution}" \
                           show_ui:="${show_ui}"
