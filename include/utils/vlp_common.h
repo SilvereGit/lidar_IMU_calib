@@ -41,7 +41,8 @@ public:
 
   enum ModelType {
     VLP_16,
-    HDL_32E    // not support yet
+    HDL_32E,    // not support yet
+    HDL_32
   };
 
   VelodyneCorrection(ModelType modelType = VLP_16) : m_modelType(modelType) {
@@ -58,6 +59,13 @@ public:
       outPointCloud.is_dense = false;
       outPointCloud.resize(outPointCloud.height * outPointCloud.width);
     }
+    else if (m_modelType == ModelType::HDL_32) {
+      outPointCloud.height = 32;
+      outPointCloud.width = 24*(int)lidarMsg->packets.size();
+      outPointCloud.is_dense = false;
+      outPointCloud.resize(outPointCloud.height * outPointCloud.width);
+    }
+
 
     int block_counter = 0;
 
@@ -124,7 +132,7 @@ public:
               float z_coord = z;
 
               float intensity = raw->blocks[block].data[k+2];  // 反射率
-              double point_timestamp = scan_timestamp + getExactTime(scan_mapping_16[dsr], 2*block_counter+firing);
+              double point_timestamp = scan_timestamp + getExactTime(scan_mapping_32[dsr], block_counter+firing);
 
               TPoint point;
               point.timestamp = point_timestamp;
@@ -141,6 +149,8 @@ public:
               }
               if(m_modelType == ModelType::VLP_16)
                 outPointCloud.at(2*block_counter+firing, scan_mapping_16[dsr]) = point;
+              else if(m_modelType == ModelType::HDL_32)
+                outPointCloud.at(2*block_counter+firing, scan_mapping_32[dsr]) = point;
             }
           }
         }
@@ -177,7 +187,7 @@ public:
 
 
   inline double getExactTime(int dsr, int firing) const {
-    return mVLP16TimeBlock[firing][dsr];
+    return mHDL32TimeBlock[firing][dsr];
   }
 
 private:
@@ -247,7 +257,101 @@ private:
         }
       }
     }
+    // adding parameters for HDL-32
+    else if (modelType == HDL_32) {
+      FIRINGS_PER_BLOCK =   1;
+      SCANS_PER_FIRING  =  32;
+      BLOCK_TDURATION   = 46.08f;   // [µs] TODO
+      DSR_TOFFSET       =   1.152f;   // [µs]
+      FIRING_TOFFSET    =  46.08f;   // [µs]
+      PACKET_TIME = (BLOCKS_PER_PACKET*2*FIRING_TOFFSET);
+
+      float vert_correction[32] = {
+              -0.5352924815866609,
+              -0.1628392174657417,
+              -0.5119050696099369,
+              -0.13962634015954636,
+              -0.4886921905584123,
+              -0.11641346285335104,
+              -0.4654793115068877,
+              -0.09302604738596851,
+              -0.44209189953016365,
+              -0.06981317007977318,
+              -0.4188790204786391,
+              -0.046600292773577856,
+              -0.39566614142711454,
+              -0.023212879051524585,
+              -0.3722787294503905,
+              0.0,
+              -0.3490658503988659,
+              0.023212879051524585,
+              -0.32585297134734137,
+              0.046600292773577856,
+              -0.30246555937061725,
+              0.06981317007977318,
+              -0.2792526803190927,
+              0.09302604738596851,
+              -0.25603980126756815,
+              0.11641346285335104,
+              -0.23265238929084414,
+              0.13962634015954636,
+              -0.20943951023931956,
+              0.1628392174657417,
+              -0.18622663118779495,
+              0.18622663118779495
+
+
+      };
+      for(int i = 0; i < 32; i++) {
+        cos_vert_angle_[i] = std::cos(vert_correction[i]);
+        sin_vert_angle_[i] = std::sin(vert_correction[i]);
+      }
+
+      /*scan_mapping_32[0]=31;
+      scan_mapping_32[1]=15;
+      scan_mapping_32[2]=30;
+      scan_mapping_32[3]=14;
+      scan_mapping_32[4]=29;
+      scan_mapping_32[5]=13;
+      scan_mapping_32[6]=28;
+      scan_mapping_32[7]=12;
+      scan_mapping_32[8]=27;
+      scan_mapping_32[9]=11;
+      scan_mapping_32[10]=26;
+      scan_mapping_32[11]=10;
+      scan_mapping_32[12]=25;
+      scan_mapping_32[13]=9;
+      scan_mapping_32[14]=24;
+      scan_mapping_32[15]=8;
+      scan_mapping_32[16]=23;
+      scan_mapping_32[17]=7;
+      scan_mapping_32[18]=22;
+      scan_mapping_32[19]=6;
+      scan_mapping_32[20]=21;
+      scan_mapping_32[21]=5;
+      scan_mapping_32[22]=20;
+      scan_mapping_32[23]=4;
+      scan_mapping_32[24]=19;
+      scan_mapping_32[25]=3;
+      scan_mapping_32[26]=18;
+      scan_mapping_32[27]=2;
+      scan_mapping_32[28]=17;
+      scan_mapping_32[29]=1;
+      scan_mapping_32[30]=16;
+      scan_mapping_32[31]=0;*/
+      for(unsigned int i=0; i<32; i++)
+        scan_mapping_32[i] = i;
+
+      for(unsigned int w = 0; w < 1084; w++) {
+        for(unsigned int h = 0; h < 32; h++) {
+          mHDL32TimeBlock[w][h] = h * DSR_TOFFSET * 1e-6 + w * FIRING_TOFFSET * 1e-6; /// HDL-32 32*1824
+        }
+      }
+    }
   }
+
+
+
 
   inline bool pointInRange(float range) const {
     return (range >= m_config.min_range
@@ -318,6 +422,7 @@ private:
   ModelType m_modelType;
 
   double mVLP16TimeBlock[1824][16];
+  double mHDL32TimeBlock[1084][32];
 };
 
 }
