@@ -57,6 +57,7 @@ struct PoseData {
 enum LidarModelType {
     VLP_16,
     VLP_16_SIMU,
+    HDL_32E
 };
 
 class LioDataset {
@@ -92,6 +93,10 @@ public:
         p_LidarConvert_ = VelodyneCorrection::Ptr(
                 new VelodyneCorrection(VelodyneCorrection::ModelType::VLP_16));
         break;
+      case LidarModelType::HDL_32E:
+        p_LidarConvert_ = VelodyneCorrection::Ptr(
+                new VelodyneCorrection(VelodyneCorrection::ModelType::HDL_32E));
+        break;
       default:
         std::cout << "LiDAR model " << lidar_model_
                   << " not support yet." << std::endl;
@@ -124,7 +129,7 @@ public:
                               view_full.getEndTime() : time_init + ros::Duration(bag_durr);
       view.addQuery(*data_->bag_, rosbag::TopicQuery(topics), time_init, time_finish);
     }
-
+    
     for (rosbag::MessageInstance const m : view) {
       const std::string &topic = m.getTopic();
 
@@ -135,8 +140,10 @@ public:
         if (m.getDataType() == std::string("velodyne_msgs/VelodyneScan")) {
           velodyne_msgs::VelodyneScan::ConstPtr vlp_msg =
                   m.instantiate<velodyne_msgs::VelodyneScan>();
-          timestamp = vlp_msg->header.stamp.toSec();
+                  
           p_LidarConvert_->unpack_scan(vlp_msg, pointcloud);
+          timestamp = pcl_conversions::fromPCL(pointcloud.header.stamp).toSec();
+
         }
         if (m.getDataType() == std::string("sensor_msgs/PointCloud2")) {
           sensor_msgs::PointCloud2::ConstPtr scan_msg =

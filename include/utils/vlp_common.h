@@ -41,31 +41,22 @@ public:
 
   enum ModelType {
     VLP_16,
-    HDL_32E,    // not support yet
-    HDL_32
+    HDL_32E 
   };
 
   VelodyneCorrection(ModelType modelType = VLP_16) : m_modelType(modelType) {
     setParameters(m_modelType);
   }
-
-  void unpack_scan(const velodyne_msgs::VelodyneScan::ConstPtr &lidarMsg,
-                   TPointCloud &outPointCloud) const {
+  void unpack_vlp16_scan(const velodyne_msgs::VelodyneScan::ConstPtr &lidarMsg,
+                   TPointCloud &outPointCloud, bool dual_return) const {
+    if (dual_return)
+      ROS_WARN_ONCE("Support for dual return mode not implemented for VLP16, might still work");
     outPointCloud.clear();
     outPointCloud.header = pcl_conversions::toPCL(lidarMsg->header);
-    if (m_modelType == ModelType::VLP_16) {
-      outPointCloud.height = 16;
-      outPointCloud.width = 24*(int)lidarMsg->packets.size();
-      outPointCloud.is_dense = false;
-      outPointCloud.resize(outPointCloud.height * outPointCloud.width);
-    }
-    else if (m_modelType == ModelType::HDL_32) {
-      outPointCloud.height = 32;
-      outPointCloud.width = 24*(int)lidarMsg->packets.size();
-      outPointCloud.is_dense = false;
-      outPointCloud.resize(outPointCloud.height * outPointCloud.width);
-    }
-
+    outPointCloud.height = 16;
+    outPointCloud.width = 24*(int)lidarMsg->packets.size();
+    outPointCloud.is_dense = false;
+    outPointCloud.resize(outPointCloud.height * outPointCloud.width);
 
     int block_counter = 0;
 
@@ -132,7 +123,7 @@ public:
               float z_coord = z;
 
               float intensity = raw->blocks[block].data[k+2];  // 反射率
-              double point_timestamp = scan_timestamp + getExactTime(scan_mapping_32[dsr], block_counter+firing);
+              double point_timestamp = scan_timestamp + getExactTime(scan_mapping_16[dsr], 2*block_counter+firing);
 
               TPoint point;
               point.timestamp = point_timestamp;
@@ -147,15 +138,149 @@ public:
                 point.z = NAN;
                 point.intensity = 0;
               }
-              if(m_modelType == ModelType::VLP_16)
-                outPointCloud.at(2*block_counter+firing, scan_mapping_16[dsr]) = point;
-              else if(m_modelType == ModelType::HDL_32)
-                outPointCloud.at(2*block_counter+firing, scan_mapping_32[dsr]) = point;
+              outPointCloud.at(2*block_counter+firing, scan_mapping_16[dsr]) = point;
             }
           }
         }
       }
     }
+  }
+
+  void unpack_hdl32e_scan(const velodyne_msgs::VelodyneScan::ConstPtr &lidarMsg,
+                   TPointCloud &outPointCloud, bool dual_return) const {
+    outPointCloud.clear();
+    outPointCloud.header = pcl_conversions::toPCL(lidarMsg->header);
+
+    //Depending on settings the timestamp of VelodyneScan might be that of the last or first package
+    //We set the pointcloud to have the timestamp of first package to be consistent
+    outPointCloud.header.stamp = pcl_conversions::toPCL(lidarMsg->packets[0].stamp);
+
+    outPointCloud.height = 32;
+    outPointCloud.width = BLOCKS_PER_PACKET*(int)lidarMsg->packets.size();
+    outPointCloud.is_dense = false;
+    outPointCloud.resize(outPointCloud.height * outPointCloud.width);
+
+    for (size_t packet_idx = 0; packet_idx < lidarMsg->packets.size(); ++packet_idx) {
+      float azimuth;
+      float azimuth_diff;
+      float last_azimuth_diff=0;
+      float azimuth_corrected_f;
+      int azimuth_corrected;
+      float x, y, z, intensity;
+      double point_timestamp;
+
+      const raw_packet_t *raw = (const raw_packet_t *) &lidarMsg->packets[packet_idx].data[0];
+      double packet_timestamp = lidarMsg->packets[packet_idx].stamp.toSec();
+      for (int block = 0; block < BLOCKS_PER_PACKET; ++block) {
+        // Calculate difference between current and next block's azimuth angle.
+        azimuth = (float)(raw->blocks[block].rotation);
+
+        if (block < (BLOCKS_PER_PACKET-1)){
+          azimuth_diff = (float)((36000 + raw->blocks[block+1].rotation - raw->blocks[block].rotation)%36000);
+          last_azimuth_diff = azimuth_diff;
+        }
+        else {
+          azimuth_diff = last_azimuth_diff;
+        }
+
+        for (int dsr=0, k=0; dsr < SCANS_PER_FIRING; ++dsr, k += RAW_SCAN_SIZE) {
+
+          /** Position Calculation */
+          union two_bytes tmp;
+          tmp.bytes[0] = raw->blocks[block].data[k];
+          tmp.bytes[1] = raw->blocks[block].data[k+1];
+
+          /** correct for the laser rotation as a function of timing during the firings **/
+          azimuth_corrected_f = azimuth + (azimuth_diff * ((dsr*DSR_TOFFSET)  / BLOCK_TDURATION));
+          azimuth_corrected = ((int)round(azimuth_corrected_f)) % 36000;
+
+          /*condition added to avoid calculating points which are not
+        in the interesting defined area (min_angle < area < max_angle)*/
+          if ((azimuth_corrected >= m_config.min_angle
+                && azimuth_corrected <= m_config.max_angle
+                && m_config.min_angle < m_config.max_angle)
+              || (m_config.min_angle > m_config.max_angle
+                  && (azimuth_corrected <= m_config.max_angle
+                      || azimuth_corrected >= m_config.min_angle))) {
+            // convert polar coordinates to Euclidean XYZ
+            float distance = tmp.uint * DISTANCE_RESOLUTION;
+
+            float cos_vert_angle = cos_vert_angle_[dsr];
+            float sin_vert_angle = sin_vert_angle_[dsr];
+
+            float cos_rot_angle = cos_rot_table_[azimuth_corrected];
+            float sin_rot_angle = sin_rot_table_[azimuth_corrected];
+
+            x = distance * cos_vert_angle * sin_rot_angle;
+            y = distance * cos_vert_angle * cos_rot_angle;
+            z = distance * sin_vert_angle;
+
+            /** Use standard ROS coordinate system (right-hand rule) */
+            float x_coord = y;
+            float y_coord = -x;
+            float z_coord = z;
+
+            intensity = raw->blocks[block].data[k+2];  // 反射率
+
+            TPoint point;
+
+            // With dual return 2 consecutive blocks have the two echoes of the pulse
+            if (dual_return)
+              point_timestamp = packet_timestamp + mHDL32ETimeBlock[block/2][dsr];
+            else
+              point_timestamp = packet_timestamp + mHDL32ETimeBlock[block][dsr];
+
+            point.timestamp = point_timestamp;
+            point.x = x_coord;
+            point.y = y_coord;
+            point.z = z_coord;
+            point.intensity = intensity;
+
+            
+            //In dual return mode, even numbered blocks contain the last echo and odd ones the other echo.
+            //In case of only single echo, both blocks contain the same information, here in addition to range check
+            //we check that if the points are identical we set the other one to NAN so we don't have
+            //duplicate ponts in the pointcloud
+            if (!pointInRange(distance) || (dual_return && ((block%2)!=0) &&
+              pointsIdentical(point, outPointCloud.at(packet_idx*BLOCKS_PER_PACKET+block-1, scan_mapping_32[dsr])))) {
+              point.x = NAN;
+              point.y = NAN;
+              point.z = NAN;
+              point.intensity = 0;
+            }
+            outPointCloud.at(packet_idx*BLOCKS_PER_PACKET+block, scan_mapping_32[dsr]) = point;
+          }
+        }
+
+      }
+    }
+  }
+
+  void unpack_scan(const velodyne_msgs::VelodyneScan::ConstPtr &lidarMsg,
+                   TPointCloud &outPointCloud) const {
+
+    //Read the factory bytes from first package to check scanner model and scanning mode
+    uint8_t scanning_mode = lidarMsg->packets[0].data[1204];
+    uint8_t scanner_type = lidarMsg->packets[0].data[1205];
+
+    bool dual_return = false;
+    if (scanning_mode == 57)
+      dual_return = true;
+    
+    if (m_modelType == ModelType::VLP_16) {
+      if (scanner_type != 34)
+        ROS_ERROR_ONCE("Scanner type given as parameter does not match the scanner type in VelodyneScan message");
+      ROS_ASSERT(scanner_type == 34);
+      unpack_vlp16_scan(lidarMsg,outPointCloud,dual_return);
+    }
+    else if (m_modelType == ModelType::HDL_32E) {
+      if (scanner_type!=33)
+        ROS_ERROR_ONCE("Scanner type given as parameter does not match the scanner type in VelodyneScan message");
+      ROS_ASSERT(scanner_type == 33);
+      unpack_hdl32e_scan(lidarMsg,outPointCloud,dual_return);
+    }
+
+    
   }
 
 
@@ -187,8 +312,10 @@ public:
 
 
   inline double getExactTime(int dsr, int firing) const {
-    return mHDL32TimeBlock[firing][dsr];
+    return mVLP16TimeBlock[firing][dsr];
   }
+
+
 
 private:
   void setParameters(ModelType modelType) {
@@ -258,7 +385,7 @@ private:
       }
     }
     // adding parameters for HDL-32
-    else if (modelType == HDL_32) {
+    else if (modelType == HDL_32E) {
       FIRINGS_PER_BLOCK =   1;
       SCANS_PER_FIRING  =  32;
       BLOCK_TDURATION   = 46.08f;   // [µs] TODO
@@ -307,7 +434,7 @@ private:
         sin_vert_angle_[i] = std::sin(vert_correction[i]);
       }
 
-      /*scan_mapping_32[0]=31;
+      scan_mapping_32[0]=31;
       scan_mapping_32[1]=15;
       scan_mapping_32[2]=30;
       scan_mapping_32[3]=14;
@@ -338,13 +465,14 @@ private:
       scan_mapping_32[28]=17;
       scan_mapping_32[29]=1;
       scan_mapping_32[30]=16;
-      scan_mapping_32[31]=0;*/
+      scan_mapping_32[31]=0;
+      /*
       for(unsigned int i=0; i<32; i++)
         scan_mapping_32[i] = i;
-
-      for(unsigned int w = 0; w < 1084; w++) {
-        for(unsigned int h = 0; h < 32; h++) {
-          mHDL32TimeBlock[w][h] = h * DSR_TOFFSET * 1e-6 + w * FIRING_TOFFSET * 1e-6; /// HDL-32 32*1824
+*/
+      for(unsigned int w = 0; w < BLOCKS_PER_PACKET; w++) {
+        for(unsigned int h = 0; h < SCANS_PER_FIRING; h++) {
+          mHDL32ETimeBlock[w][h] = w * BLOCK_TDURATION * 1e-6 +h * DSR_TOFFSET * 1e-6; 
         }
       }
     }
@@ -356,6 +484,11 @@ private:
   inline bool pointInRange(float range) const {
     return (range >= m_config.min_range
             && range <= m_config.max_range);
+  }
+
+
+  inline bool pointsIdentical(TPoint &a, TPoint &b) const {
+    return ((a.x == b.x) && (a.y == b.y) && (a.z == b.z));
   }
 
 private:
@@ -422,7 +555,7 @@ private:
   ModelType m_modelType;
 
   double mVLP16TimeBlock[1824][16];
-  double mHDL32TimeBlock[1084][32];
+  double mHDL32ETimeBlock[BLOCKS_PER_PACKET][32];
 };
 
 }
