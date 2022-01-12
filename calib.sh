@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-bag_path="/home/mansour/data/dataset_calibration"
+bag_path="$HOME/data/dataset_calibration"
 
 outdoor_sync_bag_name=(
 #"Court-01.bag"
@@ -18,15 +18,20 @@ indoor_sync_bag_name=(
 #"Garage-03.bag"
 #"Garage-04.bag"
 #"Garage-05.bag"
+#"test-300-garage-fixed.bag"
+#"test600garage-fixed.bag"
 )
 
 imu_topic_name=(
 #"/vectornav/imu"
 "/imu"
+#"/imu1/data_sync"
 #"/imu2/data_sync"
 #"/imu3/data_sync"
 )
 
+#lidar_model="HDL_32E"
+lidar_model="VLP_16"
 bag_start=1
 bag_durr=600
 scan4map=15
@@ -47,6 +52,7 @@ for i in "${!sync_bag_name[@]}"; do
     for j in "${!imu_topic_name[@]}"; do
         path_bag="$bag_path/${sync_bag_name[i]}"
 
+        echo "lidar_model:=${lidar_model}"
         echo "topic_imu:=${imu_topic_name[j]}"
         echo "path_bag:=${path_bag}"
         echo "ndtResolution:=${ndtResolution}"
@@ -58,7 +64,7 @@ for i in "${!sync_bag_name[@]}"; do
                           bag_start:="${bag_start}" \
                           bag_durr:="${bag_durr}" \
                           scan4map:="${scan4map}" \
-                          lidar_model:="HDL_32" \
+                          lidar_model:="${lidar_model}" \
                           time_offset_padding:="${timeOffsetPadding}"\
                           ndtResolution:="${ndtResolution}" \
                           show_ui:="${show_ui}"
