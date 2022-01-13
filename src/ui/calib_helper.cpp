@@ -301,7 +301,7 @@ void CalibrHelper::saveCalibResult(const std::string& calib_result_file) const {
             << "time_offset" << ","
             << "gravity.x" << "," << "gravity.y" << "," << "gravity.z" << "," << "gravity.l2norm" << ","
             << "gyro_bias.x" << "," << "gyro_bias.y" << "," <<"gyro_bias.z" << ","
-            << "acce_bias.z" << "," << "acce_bias.y" << "," <<"acce_bias.z" << "\n";
+            << "acce_bias.x" << "," << "acce_bias.y" << "," <<"acce_bias.z" << "\n";
     outfile.close();
   }
 

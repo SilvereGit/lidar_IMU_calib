@@ -111,7 +111,7 @@ public:
 
     std::cout << "P_LinI      : " << p_LinI.transpose() << std::endl;
     std::cout << "euler_LtoI  : " << euler_LtoI.transpose() << std::endl;
-    std::cout << "q_LtoI      : " <<q_LtoI.x() <<" "<<q_LtoI.y() <<" "<<q_LtoI.z() <<" "<< q_LtoI.w() <<" " << std::endl;
+    std::cout << "q_LtoI      : " << q_LtoI.x() <<" "<<q_LtoI.y() <<" "<<q_LtoI.z() <<" "<< q_LtoI.w() <<" " << std::endl;
     std::cout << "P_IinL      : " << p_IinL.transpose() << std::endl;
     std::cout << "euler_ItoL  : " << euler_ItoL.transpose() << std::endl;
     std::cout << "q_ItoL      : " <<q_ItoL.x() <<" "<<q_ItoL.y() <<" "<<q_ItoL.z() <<" " << q_ItoL.w() <<" "<< std::endl;
