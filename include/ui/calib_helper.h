@@ -72,6 +72,13 @@ protected:
 
   void Mapping(bool relocalization = false);
 
+  double bag_start_, bag_durr_;
+  double scan4map_;
+  double knot_distance_;
+  double time_offset_padding_;
+  Eigen::Vector3d initial_p_LinI_;
+  Eigen::Quaterniond initial_q_LtoI_;
+
   /// dataset
   std::string cache_path_;
   std::string topic_imu_;

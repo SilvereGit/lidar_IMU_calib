@@ -46,7 +46,9 @@ public:
           acce_bias(Eigen::Vector3d(0,0,0)) {
 
     double gyroscope_noise_density = 1.745e-4;
+    //ours: 6.108652381980153e-05
     double accelerometer_noise_density = 5.88e-4;
+    //ours: 0.0013734
     double imu_rate = 400.0;
     double lidar_noise = 0.02;
 
@@ -61,6 +63,17 @@ public:
     global_opt_gyro_weight = 28.0;
     global_opt_acce_weight = 18.5;
     global_opt_lidar_weight = 10.0;
+
+    //scaled with the ratio in noise densities between ours and their imu
+    //global_opt_gyro_weight = 28.0 * 2.8571428571428577; //0.0001745 / 6.108652381980153e-05
+   // global_opt_acce_weight = 18.5 * 0.42857142857142844;//0.000588 / 0.001372
+  }
+
+
+  void set_optimization_weights(const double gyro_weight,const double acce_weight,const double lidar_weight ) {
+    global_opt_gyro_weight = gyro_weight;
+    global_opt_acce_weight = acce_weight;
+    global_opt_lidar_weight = lidar_weight;
   }
 
   void set_q_LtoI(Eigen::Quaterniond q) {
@@ -98,10 +111,13 @@ public:
 
     std::cout << "P_LinI      : " << p_LinI.transpose() << std::endl;
     std::cout << "euler_LtoI  : " << euler_LtoI.transpose() << std::endl;
+    std::cout << "q_LtoI      : " <<q_LtoI.x() <<" "<<q_LtoI.y() <<" "<<q_LtoI.z() <<" "<< q_LtoI.w() <<" " << std::endl;
     std::cout << "P_IinL      : " << p_IinL.transpose() << std::endl;
     std::cout << "euler_ItoL  : " << euler_ItoL.transpose() << std::endl;
+    std::cout << "q_ItoL      : " <<q_ItoL.x() <<" "<<q_ItoL.y() <<" "<<q_ItoL.z() <<" " << q_ItoL.w() <<" "<< std::endl;
+
     std::cout << "time offset : " << time_offset << std::endl;
-    std::cout << "gravity     : " << gravity.transpose() << std::endl;
+    std::cout << "gravity     : " << gravity.transpose() << " (l2norm: "<<gravity.norm()<<")" << std::endl;
     std::cout << "acce bias   : " << acce_bias.transpose() << std::endl;
     std::cout << "gyro bias   : " << gyro_bias.transpose() << std::endl;
   }
@@ -109,15 +125,21 @@ public:
   void save_result(const std::string& filename, const std::string& info) const {
     Eigen::Quaterniond q_ItoL = q_LtoI.inverse();
     Eigen::Vector3d p_IinL = q_ItoL * (-p_LinI);
+    Eigen::Vector3d euler_ItoL = q_ItoL.toRotationMatrix().eulerAngles(0,1,2);
+    euler_ItoL = euler_ItoL * 180 / M_PI;
 
     std::ofstream outfile;
     outfile.open(filename, std::ios::app);
     outfile << info << ","
+            << global_opt_gyro_weight << "," <<global_opt_acce_weight << "," << global_opt_lidar_weight<<","
             << p_IinL(0) << "," << p_IinL(1) << "," << p_IinL(2) << ","
             << q_ItoL.x() << "," << q_ItoL.y() << "," << q_ItoL.z() << "," << q_ItoL.w() << ","
-            << time_offset << "," << gravity(0) << "," << gravity(1) << "," << gravity(2) << ","
+            << p_LinI(0) << "," << p_LinI(1) << "," << p_LinI(2) << ","
+            << q_LtoI.x() << "," << q_LtoI.y() << "," << q_LtoI.z() << "," << q_LtoI.w() << ","
+            << euler_ItoL(0) << "," << euler_ItoL(1) << "," << euler_ItoL(2) << ","
+            << time_offset << "," << gravity(0) << "," << gravity(1) << "," << gravity(2) << "," << gravity.norm() << ","
             << gyro_bias(0) << "," << gyro_bias(1) << "," <<gyro_bias(2) << ","
-            << acce_bias(0) << "," << acce_bias(1) << "," <<acce_bias(2) << "\n";
+            << acce_bias(0) << "," << acce_bias(1) << "," <<acce_bias(2) << "," <<"\n";
     outfile.close();
   }
 

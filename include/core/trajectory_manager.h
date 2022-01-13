@@ -77,6 +77,31 @@ public:
     initialTrajTo(traj_end_time);
   }
 
+  void setRelativeOrientationLock(bool lock){
+    lidar_->LockRelativeOrientation(lock);
+  }
+
+  bool getRelativeOrientationLock(){
+    return lidar_->RelativeOrientationIsLocked();
+  }
+
+  void setRelativePositionLock(bool lock){
+    lidar_->LockRelativePosition(lock);
+  }
+
+  bool getRelativePositionLock(){
+    return lidar_->RelativePositionIsLocked();
+  }
+
+
+  void setTimeOffsetLock(bool lock){
+    lidar_->LockTimeOffset(lock);
+  }
+
+  bool getTimeOffsetLock(){
+    return lidar_->TimeOffsetIsLocked();
+  }
+
   void initialTrajTo(double max_time);
 
   void feedIMUData(const IO::IMUData& data);

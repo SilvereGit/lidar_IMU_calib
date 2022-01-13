@@ -140,7 +140,6 @@ public:
         if (m.getDataType() == std::string("velodyne_msgs/VelodyneScan")) {
           velodyne_msgs::VelodyneScan::ConstPtr vlp_msg =
                   m.instantiate<velodyne_msgs::VelodyneScan>();
-                  
           p_LidarConvert_->unpack_scan(vlp_msg, pointcloud);
           timestamp = pcl_conversions::fromPCL(pointcloud.header.stamp).toSec();
 
@@ -151,7 +150,6 @@ public:
           timestamp = scan_msg->header.stamp.toSec();
           p_LidarConvert_->unpack_scan(scan_msg, pointcloud);
         }
-
         data_->scan_data_.emplace_back(pointcloud);
         data_->scan_timestamps_.emplace_back(timestamp);
       }

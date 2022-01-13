@@ -36,20 +36,39 @@ CalibrHelper::CalibrHelper(ros::NodeHandle& nh)
           ndt_resolution_(0.5),
           associated_radius_(0.05) {
   std::string topic_lidar;
-  double bag_start, bag_durr;
-  double scan4map;
-  double knot_distance;
-  double time_offset_padding;
+  double gyro_weight;
+  double accelerometer_weight;
+  double lidar_weight;
+    
+  std::vector<double> initial_rotation;
+  std::vector<double> initial_offsets;
 
   nh.param<std::string>("path_bag", bag_path_, "V1_01_easy.bag");
   nh.param<std::string>("topic_imu", topic_imu_, "/imu0");
   nh.param<std::string>("topic_lidar", topic_lidar, "/velodyne_packets");
-  nh.param<double>("bag_start", bag_start, 0);
-  nh.param<double>("bag_durr", bag_durr, -1);
-  nh.param<double>("scan4map", scan4map, 15);
+  nh.param<double>("bag_start", bag_start_, 0);
+  nh.param<double>("bag_durr", bag_durr_, -1);
+  nh.param<double>("scan4map", scan4map_, 15);
   nh.param<double>("ndtResolution", ndt_resolution_, 0.5);
-  nh.param<double>("time_offset_padding", time_offset_padding, 0.015);
-  nh.param<double>("knot_distance", knot_distance, 0.02);
+  nh.param<double>("time_offset_padding", time_offset_padding_, 0.015);
+  nh.param<double>("knot_distance", knot_distance_, 0.02);
+  nh.param<double>("gyro_weight", gyro_weight, 28.0);
+  nh.param<double>("accelerometer_weight", accelerometer_weight, 18.5);
+  nh.param<double>("lidar_weight", lidar_weight, 10.0);
+  nh.getParam("initial_p_LinI", initial_offsets);
+  nh.getParam("initial_q_LtoI", initial_rotation);
+  
+  if (initial_offsets.size()==3)
+    initial_p_LinI_ = Eigen::Vector3d(initial_offsets[0],initial_offsets[2],initial_offsets[2]);
+  else
+    initial_p_LinI_ = Eigen::Vector3d(0,0,0);
+
+  if (initial_rotation.size()==4)
+    initial_q_LtoI_ =  Eigen::Quaterniond(initial_rotation[3],initial_rotation[0],initial_rotation[1],initial_rotation[2]); //.w is given as first param to constructor
+  else
+    initial_q_LtoI_ = Eigen::Quaterniond::Identity();
+
+
 
   if (!createCacheFolder(bag_path_)) {
     calib_step_ = Error;
@@ -72,17 +91,22 @@ CalibrHelper::CalibrHelper(ros::NodeHandle& nh)
     /// read dataset
     std::cout << "\nLoad dataset from " << bag_path_ << std::endl;
     IO::LioDataset lio_dataset_temp(lidar_model_type);
-    lio_dataset_temp.read(bag_path_, topic_imu_, topic_lidar, bag_start, bag_durr);
+    lio_dataset_temp.read(bag_path_, topic_imu_, topic_lidar, bag_start_, bag_durr_);
     dataset_reader_ = lio_dataset_temp.get_data();
     dataset_reader_->adjustDataset();
   }
 
   map_time_ = dataset_reader_->get_start_time();
-  scan4map_time_ = map_time_ + scan4map;
+  scan4map_time_ = map_time_ + scan4map_;
   double end_time = dataset_reader_->get_end_time();
 
   traj_manager_ = std::make_shared<TrajectoryManager>(
-          map_time_, end_time, knot_distance, time_offset_padding);
+          map_time_, end_time, knot_distance_, time_offset_padding_);
+  traj_manager_->getCalibParamManager()->set_optimization_weights(gyro_weight,accelerometer_weight,lidar_weight);
+
+  traj_manager_->getCalibParamManager()->set_p_LinI(initial_p_LinI_);
+
+  traj_manager_->getCalibParamManager()->set_q_LtoI(initial_q_LtoI_);
 
   scan_undistortion_ = std::make_shared<ScanUndistortion>(
           traj_manager_, dataset_reader_);
@@ -254,18 +278,28 @@ void CalibrHelper::Mapping(bool relocalization) {
   }
 }
 
-
 void CalibrHelper::saveCalibResult(const std::string& calib_result_file) const {
   if (!boost::filesystem::exists(calib_result_file)) {
     std::ofstream outfile;
     outfile.open(calib_result_file, std::ios::app);
     outfile << "bag_path" << ","
             << "imu_topic" << "," << "map_time" << "," << "iteration_step" << ","
+            << "bag_start" << "," << "bag_durr" << "," << "scan4map" << ","
+            << "ndtResolution" << "," << "knot_distance" << ","
+            << "init_p_LinI.x" << "," << "init_p_LinI.y" << "," << "init_p_LinI.z" << ","
+            << "init_q_LtoI.x" << "," << "init_q_LtoI.y" << "," << "init_q_LtoI.z" << ","
+            << "init_q_LtoI.w" << ","
+            << "rot_opt_locked" << "," << "pos_opt_locked" << "," << "time_opt_locked" << ","
+            << "gyro_weight" << "," << "acce_weight" << "," << "lidar_weight" << ","
             << "p_IinL.x" << "," << "p_IinL.y" << "," << "p_IinL.z" << ","
-            << "q_ItoL.x" << "," << "q_ItoL.y" << "," << "q_ItoL" << ","
+            << "q_ItoL.x" << "," << "q_ItoL.y" << "," << "q_ItoL.z" << ","
             << "q_ItoL.w" << ","
+            << "p_LinI.x" << "," << "p_LinI.y" << "," << "p_LinI.z" << ","
+            << "q_LtoI.x" << "," << "q_LtoI.y" << "," << "q_LtoI.z" << ","
+            << "q_LtoI.w" << ","
+            << "euler_ItoL.x" << "," << "euler_ItoL.y" << "," << "euler_ItoL.z" << ","
             << "time_offset" << ","
-            << "gravity.x" << "," << "gravity.y" << "," << "gravity.z" << ","
+            << "gravity.x" << "," << "gravity.y" << "," << "gravity.z" << "," << "gravity.l2norm" << ","
             << "gyro_bias.x" << "," << "gyro_bias.y" << "," <<"gyro_bias.z" << ","
             << "acce_bias.z" << "," << "acce_bias.y" << "," <<"acce_bias.z" << "\n";
     outfile.close();
@@ -276,6 +310,14 @@ void CalibrHelper::saveCalibResult(const std::string& calib_result_file) const {
   ss << "," << topic_imu_;
   ss << "," << map_time_;
   ss << "," << iteration_step_;
+  ss << "," << bag_start_;
+  ss << "," << bag_durr_;
+  ss << "," << scan4map_;
+  ss << "," << ndt_resolution_;
+  ss << "," << knot_distance_;
+  ss << "," << initial_p_LinI_(0) << "," << initial_p_LinI_(1) << "," << initial_p_LinI_(2);
+  ss << "," << initial_q_LtoI_.x() << "," << initial_q_LtoI_.y() << "," << initial_q_LtoI_.z() << "," << initial_q_LtoI_.w();
+  ss << "," << traj_manager_->getRelativeOrientationLock() << "," << traj_manager_->getRelativePositionLock() << "," << traj_manager_->getTimeOffsetLock();
   std::string info;
   ss >> info;
 
