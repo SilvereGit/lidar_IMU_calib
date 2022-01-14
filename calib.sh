@@ -11,33 +11,40 @@ outdoor_sync_bag_name=(
 )
 
 indoor_sync_bag_name=(
-#"2021-12-20-11-34-55_0.bag"
-#"2021-12-22-12-29-01.bag"
-"2021-12-22-12-15-09.bag"
 #"Garage-01.bag"
 #"Garage-03.bag"
 #"Garage-04.bag"
 #"Garage-05.bag"
-#"test-300-garage-fixed.bag"
-#"test600garage-fixed.bag"
+
 )
 
 imu_topic_name=(
-#"/vectornav/imu"
 "/imu"
 #"/imu1/data_sync"
 #"/imu2/data_sync"
 #"/imu3/data_sync"
 )
 
-#lidar_model="HDL_32E"
-lidar_model="VLP_16"
-bag_start=1
-bag_durr=600
+lidar_model="HDL_32E"
+#lidar_model="VLP_16"
+
+gyro_weight=28.0
+accelerometer_weight=18.5
+lidar_weight=10.0
+
+initial_p_LinI=([0.0,0.0,0.0])
+initial_q_LtoI=([0.0,0.0,0.0,1.0])
+
+#how many seconds worth of data from the timestamp of first scan do we use to create the lidar odometry map
+#after that time map is not updated, data is just matched to the map, only for initial lidar odometry
 scan4map=15
 timeOffsetPadding=0.015
 
 show_ui=true  #false
+
+bag_start=1
+bag_durr=600
+
 
 bag_count=-1
 sync_bag_name=(${outdoor_sync_bag_name[*]} ${indoor_sync_bag_name[*]})
@@ -67,6 +74,11 @@ for i in "${!sync_bag_name[@]}"; do
                           lidar_model:="${lidar_model}" \
                           time_offset_padding:="${timeOffsetPadding}"\
                           ndtResolution:="${ndtResolution}" \
+                          gyro_weight:="${gyro_weight}" \
+                          accelerometer_weight:="${accelerometer_weight}" \
+                          lidar_weight:="${lidar_weight}" \
+                          initial_p_LinI:="${initial_p_LinI}"\
+                          initial_q_LtoI:="${initial_q_LtoI}" \
                           show_ui:="${show_ui}"
     done
 done
