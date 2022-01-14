@@ -11,21 +11,14 @@ outdoor_sync_bag_name=(
 )
 
 indoor_sync_bag_name=(
-#"2021-12-20-11-34-55_0.bag"
-#"2021-12-22-12-29-01.bag"
-#"2021-12-22-12-15-09-fixed.bag"
 #"Garage-01.bag"
 #"Garage-03.bag"
 #"Garage-04.bag"
 #"Garage-05.bag"
-#"test-300-garage-fixed-combined.bag"
-#"test600garage-fixed-combined.bag"
-#"calib_01-fixed-combined.bag"
-"22_1_13/2022_1_13_calib_4.bag"
+
 )
 
 imu_topic_name=(
-#"/vectornav/imu"
 "/imu"
 #"/imu1/data_sync"
 #"/imu2/data_sync"
@@ -49,8 +42,8 @@ timeOffsetPadding=0.015
 
 show_ui=true  #false
 
-bag_start=13
-bag_durr=60 
+bag_start=1
+bag_durr=600
 
 
 bag_count=-1

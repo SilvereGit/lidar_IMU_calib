@@ -46,9 +46,8 @@ public:
           acce_bias(Eigen::Vector3d(0,0,0)) {
 
     double gyroscope_noise_density = 1.745e-4;
-    //ours: 6.108652381980153e-05
+ 
     double accelerometer_noise_density = 5.88e-4;
-    //ours: 0.0013734
     double imu_rate = 400.0;
     double lidar_noise = 0.02;
 
@@ -64,9 +63,6 @@ public:
     global_opt_acce_weight = 18.5;
     global_opt_lidar_weight = 10.0;
 
-    //scaled with the ratio in noise densities between ours and their imu
-    //global_opt_gyro_weight = 28.0 * 2.8571428571428577; //0.0001745 / 6.108652381980153e-05
-   // global_opt_acce_weight = 18.5 * 0.42857142857142844;//0.000588 / 0.001372
   }
 
 
